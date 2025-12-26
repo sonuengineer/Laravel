@@ -5,10 +5,14 @@ namespace App\Http\Controllers;
 use App\Models\Task;
 use Illuminate\Http\Request;
 use App\Services\DjangoRuleService;
-use Carbon\Carbon;
 
 class TaskController extends Controller
 {
+    /**
+     * List tasks
+     * Admin → all tasks
+     * User  → only assigned tasks
+     */
     public function index()
     {
         if (auth()->user()->role === 'admin') {
@@ -18,73 +22,64 @@ class TaskController extends Controller
         return Task::where('assigned_to', auth()->id())->get();
     }
 
+    /**
+     * Create task (ADMIN ONLY)
+     */
     public function store(Request $request)
     {
         if (auth()->user()->role !== 'admin') {
-            return response()->json(['error' => 'Only admin can assign tasks'], 403);
+            return response()->json(['error' => 'Only admin can create tasks'], 403);
         }
 
-        $request->validate([
-            'title' => 'required',
-            'assigned_to' => 'required',
-            'due_date' => 'required|date',
+        $data = $request->validate([
+            'title'       => 'required|string',
+            'priority'    => 'required|string',
+            'due_date'    => 'required|date',
+            'assigned_to' => 'required|exists:users,id',
+            'project_id'  => 'required|exists:projects,id',
         ]);
 
         return Task::create([
-            'title' => $request->title,
-            'priority' => $request->priority,
-            'due_date' => $request->due_date,
-            'assigned_to' => $request->assigned_to,
-            'project_id' => $request->project_id,
+            ...$data,
             'status' => 'TODO',
         ]);
     }
 
+    /**
+     * Update task status (RULE ENGINE CONTROLLED)
+     */
     public function updateStatus(
         Request $request,
         Task $task,
         DjangoRuleService $service
     ) {
         $request->validate([
-            'status' => 'required|in:TODO,IN_PROGRESS,DONE'
+            'status' => 'required|string',
         ]);
 
-        if (
-            Carbon::parse($task->due_date)->isPast()
-            && auth()->user()->role !== 'admin'
-        ) {
+        $result = $service->validateTask([
+            'current_status' => $task->status,
+            'new_status'     => $request->status,
+            'due_date'       => $task->due_date,
+            'role'           => auth()->user()->role,
+        ]);
+
+        // SAFETY: Django service down / invalid
+        if (!is_array($result)) {
             return response()->json([
-                'error' => 'Task overdue. Only admin can update.'
+                'error' => 'Rule engine unavailable'
+            ], 503);
+        }
+
+        if (!$result['valid']) {
+            return response()->json([
+                'error' => $result['message'] ?? 'Status change not allowed'
             ], 403);
         }
 
-        $result = $service->validate([
-            'current_status' => $task->status,
-            'new_status' => $request->status,
-            'due_date' => $task->due_date,
-            'role' => auth()->user()->role,
+        $task->update([
+            'status' => $request->status
         ]);
-
-        if (!$result['valid']) {
-            return response()->json(['error' => $result['message']], 403);
-        }
-
-        $task->update(['status' => $request->status]);
-
-        return response()->json($task);
-    }
-
-    public function updateDueDate(Request $request, Task $task)
-    {
-        if (auth()->user()->role !== 'admin') {
-            return response()->json(['error' => 'Only admin'], 403);
-        }
-
-        $request->validate([
-            'due_date' => 'required|date'
-        ]);
-
-        $task->update(['due_date' => $request->due_date]);
 
         return response()->json($task);
     }
