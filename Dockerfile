@@ -20,6 +20,8 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 # Install PHP dependencies
 RUN composer install --no-dev --optimize-autoloader
 
+RUN php artisan migrate --force || true
+
 # Fix permissions
 RUN chmod -R 777 storage bootstrap/cache
 
