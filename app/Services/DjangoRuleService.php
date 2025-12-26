@@ -9,28 +9,21 @@ class DjangoRuleService
     /**
      * Validate task status change via Django rule engine
      */
-    public function validate(array $data)
-    {
-        try {
-            $response = Http::timeout(5)->post(
-                env('DJANGO_SERVICE_URL'),
-                $data
-            );
+  public function validate(array $data)
+{
+    try {
+        $response = Http::timeout(5)
+            ->acceptJson()
+            ->post(env('DJANGO_SERVICE_URL'), $data);
 
-            if ($response->failed()) {
-                return [
-                    'valid' => false,
-                    'message' => 'Rule engine rejected request'
-                ];
-            }
+        return $response->json();
 
-            return $response->json();
-
-        } catch (\Exception $e) {
-            return [
-                'valid' => false,
-                'message' => 'Rule engine unavailable'
-            ];
-        }
+    } catch (\Exception $e) {
+        return [
+            'valid' => false,
+            'message' => 'Rule engine unavailable'
+        ];
     }
+}
+
 }
