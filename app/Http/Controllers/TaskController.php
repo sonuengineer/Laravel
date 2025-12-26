@@ -57,7 +57,7 @@ class TaskController extends Controller
             'status' => 'required|string',
         ]);
 
-        $result = $service->validateTask([
+        $result = $service->validate([
             'current_status' => $task->status,
             'new_status'     => $request->status,
             'due_date'       => $task->due_date,
